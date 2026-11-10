@@ -21,3 +21,4 @@ Your save is read inside your own browser. It is never uploaded anywhere.
 ## Notes
 - Made for Necesse 1.3.3. Other versions may generate slightly differently.
 - The whole viewer is the single file `index.html`; you can also download it and open it offline.
+ 
