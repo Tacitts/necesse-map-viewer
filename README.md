@@ -8,6 +8,7 @@ A map viewer for Necesse worlds that runs entirely in your browser.
 - Shows your saved world on the Surface, Cave and Deep Cave layers.
 - Fills in the areas you haven't explored yet from your world's seed, using a port of the game's own world generator (game version 1.3.3).
 - Marks villages, pirate villages, dungeon entrances, boss arenas, crypts, temples, mines and other structures.
+- Draws those structures tile by tile in unexplored areas too, on all three layers, matching what the game will generate there.
 - Shows chests and their contents, including chests in unexplored areas, with an item search.
 
 ## How to use it
