@@ -67,6 +67,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .links a { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); text-decoration: none; white-space: nowrap; }
 .links a:hover, .links a:focus-visible { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 780px) { .links { gap: 10px; font-size: 12px; } }
+.menuwrap { position: relative; display: inline-flex; }
+.menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; min-width: 220px; padding: 4px; display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 6px 24px rgba(0,0,0,.3); }
+.menu[hidden] { display: none; }
+@media (max-width: 780px) { .menu { left: auto; right: 0; } .lbl-long { display: none; } }
+@media (min-width: 781px) { .lbl-short { display: none; } }
+.menu button { text-align: left; padding: 7px 10px; border: 0; border-radius: 5px; background: none; cursor: pointer; color: var(--fg); }
+.menu button:hover, .menu button:focus-visible { background: var(--accent-soft); outline: none; }
+.menu button:disabled { color: var(--muted); cursor: default; background: none; }
+.menu small { display: block; color: var(--muted); font: 11.5px var(--font-mono); margin-top: 1px; }
+#hoverTip { position: absolute; z-index: 4; pointer-events: none; max-width: 260px; padding: 8px 10px; border-radius: 7px; font-size: 12.5px;
+  background: var(--surface); color: var(--fg); border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+#hoverTip b { display: block; font-weight: 600; margin-bottom: 4px; }
+#hoverTip .it { display: flex; align-items: center; gap: 6px; line-height: 22px; }
+#hoverTip .it .ic { flex: none; width: 20px; height: 20px; image-rendering: pixelated; background-repeat: no-repeat; }
+#hoverTip .it .n { margin-left: auto; padding-left: 10px; color: var(--muted); font: 11.5px var(--font-mono); }
+#hoverTip .more, #hoverTip .hint2 { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
 #openFiles { max-width: 16em; overflow: hidden; text-overflow: ellipsis; }
 .seedtag { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); }
 .seedtag b { color: var(--fg); font: 500 13px var(--font-mono); user-select: all; }
@@ -239,6 +256,11 @@ textarea { width: 100%; box-sizing: border-box; height: 84px; margin: 8px 0 6px;
       <button class="btn icon" id="zoomOut" type="button" aria-label="Zoom out" title="Zoom out (-)">&minus;</button>
       <button class="btn icon" id="zoomIn" type="button" aria-label="Zoom in" title="Zoom in (+)">+</button>
       <button class="btn" id="fitBtn" type="button" title="Fit the whole layer (0)">Fit</button>
+      <span class="menuwrap"><button class="btn" id="picBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="picMenu" aria-label="Save image"><span class="lbl-long">Save image</span><span class="lbl-short">Image</span></button>
+        <span class="menu" id="picMenu" role="menu" hidden>
+          <button type="button" role="menuitem" id="picView">This view<small>as it is on screen</small></button>
+          <button type="button" role="menuitem" id="picLayer">Whole explored layer<small id="picLayerSize"></small></button>
+        </span></span>
     </div>
     <button class="btn" id="viewBtn" type="button" aria-expanded="false" aria-controls="viewOpts">View</button>
     <div class="grp" id="viewOpts">
@@ -262,6 +284,7 @@ textarea { width: 100%; box-sizing: border-box; height: 84px; margin: 8px 0 6px;
       <canvas id="mini" aria-label="Overview"></canvas>
       <div class="hint">Drag to pan &middot; scroll to zoom</div>
       <div id="toast" hidden></div>
+      <div id="hoverTip" hidden></div>
       <div id="chestPop" hidden role="dialog" aria-label="Chest contents">
         <div class="cp-head"><div><b id="cpName"></b><div id="cpMeta"></div></div><button class="mini-btn" id="cpClose" type="button" aria-label="Close">&times;</button></div>
         <ul id="cpList"></ul>
@@ -5686,7 +5709,7 @@ function endPtr(e) {
   if (ptrs.size < 2) pinch = null;
   if (had && ptrs.size === 0 && drag && !drag.multi && drag.moved < 5 && e.type === 'pointerup') {
     if (state.arm) { var t = tileAt(p.x, p.y); addMarker(t.x, t.y); setArm(false); }
-    else openChest(chestAt(p.x, p.y));
+    else { var ch = chestAt(p.x, p.y), ld = ch ? null : ladderAt(p.x, p.y); if (ld) followLadder(ld); else openChest(ch); }
   }
   if (ptrs.size === 0) drag = null;
 }
@@ -6457,7 +6480,7 @@ function openChest(p) {
   state.chestSel = p; requestDraw();
   var pop = $('#chestPop');
   if (!p) { pop.hidden = true; return; }
-  $('#cpName').textContent = itemName(p.obj || 'chest');
+  $('#cpName').textContent = chestName(p);
   var total = p.items.reduce(function (a, b) { return a + b.n; }, 0);
   $('#cpMeta').textContent = 'x ' + p.x + ', y ' + p.y + (p.gen ? ' \u00b7 unexplored, worked out from the seed' : '') + ' \u00b7 ' + (p.items.length ? p.items.length + (p.items.length === 1 ? ' stack' : ' stacks') + ', ' + fmt(total) + (total === 1 ? ' item' : ' items') : 'empty');
   var ul = $('#cpList'); ul.textContent = '';
@@ -6474,6 +6497,144 @@ function openChest(p) {
   pop.hidden = false;
 }
 $('#cpClose').addEventListener('click', function () { openChest(null); });
+// a chest's name as the game shows it (Storage Box, not storagebox)
+function chestName(p) { return (TILE_NAMES.objects && TILE_NAMES.objects[p.obj]) || itemName(p.obj || 'chest'); }
+// a ladder at the same tile on the next layer: down from the surface to the cave (and on to the deep cave), up the other way
+var LADDER_TO = { ladderdown: ['surface', 'cave'], deepladderdown: ['cave', 'deepcave'], ladderup: ['cave', 'surface'], deepladderup: ['deepcave', 'cave'] };
+var LADDER_PAIR = { ladderdown: 'ladderup', ladderup: 'ladderdown', deepladderdown: 'deepladderup', deepladderup: 'deepladderdown' };
+function ladderAt(px, py) {
+  var list = state.ladders[state.level] || [], s = state.view.s;
+  if (!list.length || s < 1 / 16) return null;
+  var ox = W / 2 - state.view.cx * s, oy = H / 2 - state.view.cy * s, best = null, bd = s >= 0.5 ? 16 : 13;
+  for (var i = 0; i < list.length; i++) {
+    var p = list[i], d = Math.hypot(ox + (p.x + .5) * s - px, oy + (p.y + .5) * s - py);
+    if (d < bd && LADDER_TO[p.type]) { bd = d; best = p; }
+  }
+  return best;
+}
+function followLadder(ld) {
+  var to = LADDER_TO[ld.type][1], x = ld.x, y = ld.y;
+  // the other end is normally on the very same tile; take it if it is a step or two away
+  var other = (state.ladders[to] || []).filter(function (q) { return q.type === LADDER_PAIR[ld.type] && Math.abs(q.x - x) <= 3 && Math.abs(q.y - y) <= 3; })[0];
+  if (other) { x = other.x; y = other.y; }
+  $('#layerSel').value = to; setLayer(to, false);
+  state.view.cx = x + .5; state.view.cy = y + .5; updateZoom();
+  state.ping = { x: x, y: y, t: performance.now() }; hideTip(); requestDraw();
+  toast((/down/.test(ld.type) ? 'Down' : 'Up') + ' to the ' + LEVEL_LABEL[to] + ' at x ' + x + ', y ' + y + (other ? '' : ' (that end has not been explored yet)') + '.', 2500);
+}
+
+// the hover card: a chest's first items, or where a ladder leads
+var tipKey = null;
+function hideTip() { $('#hoverTip').hidden = true; tipKey = null; cv.style.cursor = ''; }
+function showTipAt(px, py, key, build) {
+  var tip = $('#hoverTip');
+  if (tipKey !== key) { tip.textContent = ''; build(tip); tipKey = key; }
+  tip.hidden = false;
+  var w = tip.offsetWidth, h = tip.offsetHeight, x = px + 16, y = py + 16;
+  if (x + w > W - 6) x = px - w - 12; if (y + h > H - 6) y = Math.max(6, py - h - 12);
+  tip.style.left = Math.max(6, x) + 'px'; tip.style.top = y + 'px';
+  cv.style.cursor = 'pointer';
+}
+cv.addEventListener('pointermove', function (e) {
+  if (e.pointerType !== 'mouse' || ptrs.size || state.arm) { hideTip(); return; }
+  var p = pos(e), ch = chestAt(p.x, p.y);
+  if (ch && ch !== state.chestSel) {
+    showTipAt(p.x, p.y, 'c' + ch.x + ',' + ch.y + ':' + state.level, function (tip) {
+      var b = document.createElement('b'); b.textContent = chestName(ch) + (ch.gen ? ' (unexplored)' : ''); tip.appendChild(b);
+      if (!ch.items.length) { var e0 = document.createElement('div'); e0.className = 'more'; e0.textContent = 'Nothing inside'; tip.appendChild(e0); }
+      // the biggest stacks first, as a quick look
+      ch.items.slice().sort(function (a, b) { return b.n - a.n; }).slice(0, 6).forEach(function (it) {
+        var row = document.createElement('div'), ic = document.createElement('span'), nm = document.createElement('span'), n = document.createElement('span');
+        row.className = 'it'; ic.className = 'ic'; chestIcon(it.id, ic, 20); nm.textContent = itemName(it.id); n.className = 'n'; n.textContent = it.n > 1 ? '×' + fmt(it.n) : '';
+        row.appendChild(ic); row.appendChild(nm); row.appendChild(n); tip.appendChild(row);
+      });
+      var more = ch.items.length - 6, h2 = document.createElement('div'); h2.className = 'hint2';
+      h2.textContent = (more > 0 ? '+' + more + ' more · ' : '') + 'click to open'; tip.appendChild(h2);
+    });
+    return;
+  }
+  var ld = ch ? null : ladderAt(p.x, p.y);
+  if (ld) {
+    showTipAt(p.x, p.y, 'l' + ld.x + ',' + ld.y + ':' + state.level, function (tip) {
+      var b = document.createElement('b'); b.textContent = LADDER_NAME[ld.type]; tip.appendChild(b);
+      var h2 = document.createElement('div'); h2.className = 'hint2'; h2.textContent = 'Click to go ' + (/down/.test(ld.type) ? 'down' : 'up') + ' to the ' + LEVEL_LABEL[LADDER_TO[ld.type][1]]; tip.appendChild(h2);
+    });
+    return;
+  }
+  hideTip();
+});
+cv.addEventListener('pointerleave', hideTip);
+cv.addEventListener('pointerdown', hideTip);
+cv.addEventListener('wheel', hideTip, { passive: true });
+
+// saving a picture
+function picName(what) {
+  var w = (($('#openFiles').textContent || '').replace(/\.zip$/i, '') || 'map').replace(/[^\w-]+/g, '_');
+  if (w === 'Open_files') w = seedLayer() ? 'seed_' + seedLayer().seedText.replace(/[^\w-]+/g, '_') : 'map';
+  return 'necesse-' + w + '-' + state.level + '-' + what + '.png';
+}
+// inside claude.ai a page may not download by itself: the viewer's downloads capability asks them to save it
+var DL = null;
+try { if (window.claude && typeof window.claude.use === 'function') window.claude.use('downloads').then(function (n) { DL = n; }, function () {}); } catch (e) {}
+function savePng(canvas, name) {
+  canvas.toBlob(function (b) {
+    if (!b) { toast('The picture is too big for this browser to save.', 5000); return; }
+    if (DL) {
+      DL.save({ filename: name, data: b }).then(function () { toast('Saved ' + name + ' (' + canvas.width + ' \u00d7 ' + canvas.height + ' pixels).', 4000); },
+        function (err) { if (err && err.code !== 'declined') toast('The picture could not be saved here' + (err.code === 'too_large' ? ': it is too big' : '') + '.', 5000); });
+      return;
+    }
+    var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+    toast('Saved ' + name + ' (' + canvas.width + ' × ' + canvas.height + ' pixels).', 4000);
+  }, 'image/png');
+}
+// the explored part of the layer, from the save, one tile = k pixels, as large as browsers can save
+function layerPicture() {
+  var L = state.layers.get(state.level);
+  if (!L || L.kind === 'seed' || !L.regions.size) return null;
+  var b = boundsOf(L), w = b.x1 - b.x0, h = b.y1 - b.y0, MAX = 16384, k = Math.max(1, Math.min(4, Math.floor(MAX / Math.max(w, h))));
+  var down = Math.max(w, h) > MAX ? MAX / Math.max(w, h) : 1;
+  return { L: L, b: b, w: w, h: h, k: k, down: down, W: Math.round(w * k * down), H: Math.round(h * k * down) };
+}
+function updatePicMenu() {
+  var P = layerPicture(), btn = $('#picLayer');
+  btn.disabled = !P;
+  $('#picLayerSize').textContent = P ? fmt(P.W) + ' × ' + fmt(P.H) + ' pixels' + (P.k > 1 ? ', ' + P.k + ' per tile' : P.down < 1 ? ', shrunk to fit' : ', 1 per tile') : 'open a world save first';
+}
+function setPicMenu(on) { $('#picMenu').hidden = !on; $('#picBtn').setAttribute('aria-expanded', on); if (on) updatePicMenu(); }
+$('#picBtn').addEventListener('click', function (e) { e.stopPropagation(); setPicMenu($('#picMenu').hidden); });
+document.addEventListener('click', function (e) { if (!e.target.closest('.menuwrap')) setPicMenu(false); });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setPicMenu(false); });
+$('#picView').addEventListener('click', function () {
+  setPicMenu(false);
+  var keep = state.hover; state.hover = null; hideTip(); draw(); state.hover = keep;
+  var v = state.view; savePng(cv, picName('x' + Math.round(v.cx) + '_y' + Math.round(v.cy)));
+});
+$('#picLayer').addEventListener('click', function () {
+  setPicMenu(false);
+  var P = layerPicture(); if (!P) return;
+  toast('Drawing the picture…', 8000);
+  setTimeout(function () {
+    var full = document.createElement('canvas'); full.width = P.w; full.height = P.h;
+    var fx = full.getContext('2d'), img = fx.createImageData(P.w, P.h), o = img.data;
+    P.L.regions.forEach(function (reg) {
+      var x0 = reg.rx * reg.w - P.b.x0, y0 = reg.ry * reg.h - P.b.y0, d = reg.rgb;
+      for (var y = 0; y < reg.h; y++) for (var x = 0; x < reg.w; x++) {
+        var i = (y * reg.w + x) * 3, r = d[i], g = d[i + 1], bl = d[i + 2]; if (!(r | g | bl)) continue;   // never explored: transparent
+        var q = ((y0 + y) * P.w + x0 + x) * 4; o[q] = r; o[q + 1] = g; o[q + 2] = bl; o[q + 3] = 255;
+      }
+    });
+    fx.putImageData(img, 0, 0);
+    var out = full;
+    if (P.k > 1 || P.down < 1) {
+      out = document.createElement('canvas'); out.width = P.W; out.height = P.H;
+      var ox2 = out.getContext('2d'); ox2.imageSmoothingEnabled = P.down < 1; ox2.drawImage(full, 0, 0, P.W, P.H);
+    }
+    savePng(out, picName('explored'));
+  }, 30);
+});
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#chestPop').hidden) openChest(null); });
 $('#chestChk').addEventListener('change', function (e) { state.showChests = e.target.checked; if (!state.showChests) openChest(null); requestDraw(); });
 state.savedChunks = { surface: new Set(), cave: new Set(), deepcave: new Set() };
