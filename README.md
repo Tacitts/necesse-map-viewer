@@ -2,7 +2,7 @@
 
 A map viewer for Necesse worlds that runs entirely in your browser.
 
-**Open it:** the GitHub Pages link for this repository (Settings → Pages).
+**Open it: https://tacitts.github.io/necesse-map-viewer/**
 
 ## What it does
 - Shows your saved world on the Surface, Cave and Deep Cave layers.
@@ -18,6 +18,9 @@ A map viewer for Necesse worlds that runs entirely in your browser.
 2. Open the viewer and choose your world's `.zip` file.
 
 Your save is read inside your own browser. It is never uploaded anywhere.
+
+## Found a problem?
+[Report it here](https://github.com/Tacitts/necesse-map-viewer/issues/new) (a GitHub account is needed), or use **Report a problem** at the top right of the viewer, which fills in your browser and where you were looking on the map. Say what you expected to see, and include the x and y from the bar at the bottom if it is about one spot on the map.
 
 ## Notes
 - Made for Necesse 1.3.3. Other versions may generate slightly differently.

@@ -63,6 +63,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 #reloadBtn.busy { animation: nmvspin .8s linear infinite; }
 @keyframes nmvspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #reloadBtn.busy { animation: none; opacity: .6; } }
+.links { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 13px; }
+.links a { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); text-decoration: none; white-space: nowrap; }
+.links a:hover, .links a:focus-visible { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 780px) { .links { gap: 10px; font-size: 12px; } }
 #openFiles { max-width: 16em; overflow: hidden; text-overflow: ellipsis; }
 .seedtag { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); }
 .seedtag b { color: var(--fg); font: 500 13px var(--font-mono); user-select: all; }
@@ -244,6 +248,10 @@ textarea { width: 100%; box-sizing: border-box; height: 84px; margin: 8px 0 6px;
       <label class="chk" id="structWrap" hidden><input type="checkbox" id="structChk" checked> Structures</label>
     </div>
     <button class="btn" id="panelBtn" type="button" aria-pressed="false">Panel</button>
+    <nav class="links" aria-label="Project">
+      <a id="reportLink" href="https://github.com/Tacitts/necesse-map-viewer/issues/new" target="_blank" rel="noopener">Report a problem</a>
+      <a id="ghLink" href="https://github.com/Tacitts/necesse-map-viewer" target="_blank" rel="noopener" title="Source code on GitHub"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M5.5 4 1.5 8l4 4M10.5 4l4 4-4 4"/></svg>GitHub</a>
+    </nav>
     <input type="file" id="fileIn" multiple accept=".zip,.mapdata,.txt" hidden>
     <input type="file" id="dirIn" webkitdirectory multiple hidden>
   </header>
@@ -6621,6 +6629,13 @@ async function reloadSave() {
   } finally { btn.classList.remove('busy'); }
 }
 $('#reloadBtn').addEventListener('click', reloadSave);
+$('#reportLink').addEventListener('click', function () {
+  var v = state.view, L = cur();
+  var body = '**What went wrong?**\n\n\n**What did you expect instead?**\n\n\n**Where on the map?** (the x and y from the bar at the bottom, if it is about one spot)\n\n\n' +
+    '---\nLayer: ' + (LEVEL_LABEL[state.level] || state.level) + ' \u00b7 view x ' + Math.round(v.cx) + ', y ' + Math.round(v.cy) + ' \u00b7 zoom ' + (Math.round(v.s * 100) / 100) +
+    ' \u00b7 ' + (L ? (L.kind === 'seed' ? 'seed only' : 'world save loaded') : 'nothing loaded') + '\nBrowser: ' + navigator.userAgent + '\nScreen: ' + innerWidth + ' x ' + innerHeight;
+  this.href = 'https://github.com/Tacitts/necesse-map-viewer/issues/new?body=' + encodeURIComponent(body);
+});
 window.addEventListener('keydown', function (e) {
   if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName)) { e.preventDefault(); reloadSave(); }
 });
