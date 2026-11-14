@@ -105,6 +105,13 @@ main { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 
 #cpList li .en { display: block; color: var(--muted); font-size: 11px; }
 #cpList li .am { font: 12px var(--font-mono); color: var(--muted); }
 #cpList li.empty { color: var(--muted); }
+#objRes li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 7px 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
+#objRes li:hover { background: var(--accent-soft); }
+#objRes li.on { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+#objRes li .ic { width: 20px; height: 20px; }
+#objRes li .meta { grid-column: 2 / 4; color: var(--muted); font-size: 12px; }
+#objRes li.empty { display: block; cursor: default; color: var(--muted); }
+#objRes li.empty:hover { background: none; }
 #chestRes li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
 #chestRes li:hover { background: var(--accent-soft); }
 #chestRes li.empty { display: block; cursor: default; color: var(--muted); }
@@ -217,6 +224,7 @@ textarea { width: 100%; box-sizing: border-box; height: 84px; margin: 8px 0 6px;
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" data-tab="markers" aria-selected="true" type="button">Structures</button>
         <button class="tab" role="tab" data-tab="chests" aria-selected="false" type="button">Chests</button>
+        <button class="tab" role="tab" data-tab="objects" aria-selected="false" type="button">Objects</button>
       </div>
       <section class="pane" data-pane="palette" hidden>
         <div class="tools" style="justify-content:flex-end">
@@ -229,6 +237,11 @@ textarea { width: 100%; box-sizing: border-box; height: 84px; margin: 8px 0 6px;
         <div class="tools"><input type="search" id="chestQ" placeholder="Search items in chests" aria-label="Search items in chests" autocomplete="off" style="flex:1"></div>
         <div class="note" id="chestSum" style="border-bottom:1px solid var(--line)"></div>
         <ul class="list" id="chestRes"></ul>
+      </section>
+      <section class="pane" data-pane="objects" hidden>
+        <div class="tools"><input type="search" id="objQ" placeholder="Search placed objects, e.g. blueberry bush" aria-label="Search placed objects and tiles" autocomplete="off" style="flex:1"><button class="mini-btn" id="objClear" type="button" hidden>Clear</button></div>
+        <div class="note" id="objSum" style="border-bottom:1px solid var(--line)"></div>
+        <ul class="list" id="objRes"></ul>
       </section>
       <section class="pane" data-pane="markers">
         <ul class="list" id="mkList"></ul>
@@ -4427,9 +4440,11 @@ function draw() {
     if (reg.dirty) paint(reg);
     ctx.drawImage(reg.canvas, x0, y0, x1 - x0, y1 - y0);
   });
+  if (state.objFind) { ctx.fillStyle = 'rgba(0,0,0,.74)'; ctx.fillRect(0, 0, W, H); }   // dim everything; the matches are drawn above the icons
   if (SL && (L.kind === 'seed' || fillNow)) drawStructures(SL, ox, oy, s, t);
-  drawChests(ox, oy, s, t);
+  if (!state.objFind) drawChests(ox, oy, s, t);
   drawLadders(ox, oy, s, t);
+  if (state.objFind) drawObjFind(L, SL && (L.kind === 'seed' || fillNow) ? SL : null, ox, oy, s);
   if (state.grid) {
     // single tiles up close; zoomed out, 16-tile chunks, then 64 and 1024 so lines stay at least 8px apart
     var gs = [1, 16, 64, 1024].filter(function (g) { return g * s >= 8; })[0];
@@ -5098,6 +5113,129 @@ function miniJump(e) {
   requestDraw();
 }
 
+/* ---------- placed object search ---------- */
+// state.objFind = { ids: Set of tile/object string IDs, tok: number }; matches are cached per region and per structure drawing
+var objTok = 0, objTimer = 0;
+function objGroups(q) {
+  // every display name containing the query, with the IDs that carry it (several pieces or growth stages share one name)
+  var g = new Map();
+  [['objects', 'object'], ['tiles', 'tile']].forEach(function (k) {
+    var tab = TILE_NAMES[k[0]];
+    for (var id in tab) {
+      if (id === 'air') continue;
+      var n = tab[id], key = k[1] + ':' + n;
+      if (n.toLowerCase().indexOf(q) < 0 && id.indexOf(q.replace(/\s+/g, '')) < 0) continue;
+      var e = g.get(key); if (!e) g.set(key, e = { name: n, kind: k[1], ids: [] }); e.ids.push(id);
+    }
+  });
+  return Array.from(g.values());
+}
+function objIxSet(ids) { var s = new Set(); ids.forEach(function (id) { if (NAME_IX[id] !== undefined) s.add(NAME_IX[id]); }); return s; }
+// explored tiles of a save region that match: a flat list of tile indices, worked out once per search
+function regMatches(reg) {
+  var f = state.objFind;
+  if (reg.objTok === f.tok) return reg.objHits;
+  var hits = [];
+  if (reg.ti) {
+    var ix = f.ix || (f.ix = objIxSet(f.ids)), oi = reg.oi, ti = reg.ti;
+    for (var i = 0; i < 65536; i++) if (ix.has(oi[i]) || ix.has(ti[i])) hits.push(i);
+  }
+  reg.objTok = f.tok; reg.objHits = hits;
+  return hits;
+}
+function vgMatches(vg) {
+  var f = state.objFind;
+  if (vg.objTok === f.tok) return vg.objHits;
+  var hits = [], TN = GEN_VILLAGE.tiles, ON = GEN_VILLAGE.objects, n = vg.n * vg.n;
+  for (var i = 0; i < n; i++) { var o = vg.o[i], t = vg.t[i]; if ((o > 0 && f.ids.has(ON[o])) || (t >= 0 && f.ids.has(TN[t]))) hits.push(i); }
+  vg.objTok = f.tok; vg.objHits = hits;
+  return hits;
+}
+function drawObjFind(L, SL, ox, oy, s) {
+  var sz = Math.max(s, 3), off = (sz - s) / 2, lv = state.level;
+  ctx.globalAlpha = 1;
+  // zoomed out a match is a bright dot; close up it keeps its own colour inside a bright outline
+  var HL = '#ffd84a', close = s >= 4;
+  function mark(x, y, c) {
+    var px = ox + x * s - off, py = oy + y * s - off;
+    if (px < -sz || py < -sz || px > W || py > H) return;
+    var X = Math.round(px), Y = Math.round(py), Z = Math.ceil(sz);
+    if (!close) { ctx.fillStyle = HL; ctx.fillRect(X, Y, Z, Z); return; }
+    ctx.fillStyle = HL; ctx.fillRect(X - 1, Y - 1, Z + 2, Z + 2);
+    ctx.fillStyle = c; ctx.fillRect(X + 1, Y + 1, Z - 2, Z - 2);
+  }
+  if (L.kind !== 'seed') L.regions.forEach(function (reg) {
+    var x0 = reg.rx * reg.w, y0 = reg.ry * reg.h;
+    if (ox + (x0 + reg.w) * s < 0 || oy + (y0 + reg.h) * s < 0 || ox + x0 * s > W || oy + y0 * s > H) return;
+    var hits = regMatches(reg), d = reg.rgb;
+    for (var i = 0; i < hits.length; i++) { var k = hits[i]; mark(x0 + (k & 255), y0 + (k >> 8), 'rgb(' + d[k * 3] + ',' + d[k * 3 + 1] + ',' + d[k * 3 + 2] + ')'); }
+  });
+  if (SL && s >= 1 / 16 && SL.pidx) visibleRegions(SL, s).forEach(function (R) {
+    for (var i = 0; i < R.ov.length; i++) {
+      var vg = SL.villages.get(R.ov[i]._vk); if (!vg || !vg.n) continue;
+      if (ox + (vg.x0 + vg.n) * s < 0 || oy + (vg.y0 + vg.n) * s < 0 || ox + vg.x0 * s > W || oy + vg.y0 * s > H) continue;
+      var hits = vgMatches(vg), TN = GEN_VILLAGE.tiles, ON = GEN_VILLAGE.objects;
+      for (var j = 0; j < hits.length; j++) {
+        var k = hits[j], lx = k % vg.n, ly = (k / vg.n) | 0, x = vg.x0 + lx, y = vg.y0 + ly;
+        if (L.kind !== 'seed' && state.savedChunks[lv] && state.savedChunks[lv].has(Math.floor(x / 16) + ',' + Math.floor(y / 16))) continue;   // explored: the save says what is there
+        var o = vg.o[k], t = vg.t[k];
+        mark(x, y, hex(saveColor(t >= 0 ? TN[t] : 'grasstile', o > 0 ? ON[o] : 'air')));
+      }
+    }
+  });
+}
+function setObjFind(ids) {
+  if (!ids || !ids.length) state.objFind = null;
+  else state.objFind = { ids: new Set(ids), tok: ++objTok };
+  $('#objClear').hidden = !state.objFind;
+  requestDraw();
+}
+// the explored tiles on this layer holding any of these IDs: how many, and the nearest to the view
+function objCount(ids) {
+  var ix = objIxSet(ids), L = cur(), n = 0, best = null, v = state.view;
+  if (!L || L.kind === 'seed' || !ix.size) return { n: 0 };
+  L.regions.forEach(function (reg) {
+    if (!reg.ti) return;
+    var oi = reg.oi, ti = reg.ti, x0 = reg.rx * reg.w, y0 = reg.ry * reg.h;
+    for (var i = 0; i < 65536; i++) if (ix.has(oi[i]) || ix.has(ti[i])) {
+      n++; var x = x0 + (i & 255), y = y0 + (i >> 8), d = Math.abs(x - v.cx) + Math.abs(y - v.cy);
+      if (!best || d < best.d) best = { x: x, y: y, d: d };
+    }
+  });
+  return { n: n, best: best };
+}
+function runObjSearch() {
+  var q = ($('#objQ').value || '').trim().toLowerCase(), res = $('#objRes'), sum = $('#objSum');
+  res.textContent = '';
+  if (!q) { sum.textContent = ''; sum.hidden = true; state.objSel = null; setObjFind(null); res.innerHTML = '<li class="empty">Type the name of anything placed in the world, for example \u201cblueberry bush\u201d, then pick it from the list to light it up on the map.</li>'; return; }
+  // typing only filters names; the map is searched once a name is picked
+  var groups = objGroups(q);
+  groups.sort(function (a, b) { return (a.name.toLowerCase().indexOf(q) !== 0) - (b.name.toLowerCase().indexOf(q) !== 0) || a.name.localeCompare(b.name); });
+  var sel = state.objSel && groups.filter(function (g) { return g.kind + ':' + g.name === state.objSel; })[0];
+  if (!sel) state.objSel = null;
+  if (sel) { sel.count = objCount(sel.ids); setObjFind(sel.ids); } else setObjFind(null);
+  sum.textContent = groups.length ? '' : 'Nothing is called \u201c' + q + '\u201d.'; sum.hidden = !!groups.length;
+  groups.slice(0, 120).forEach(function (g) {
+    var li = document.createElement('li'), ic = document.createElement('span'), nm = document.createElement('span'), ct = document.createElement('span');
+    var key = g.kind + ':' + g.name;
+    li.className = g === sel ? 'on' : '';
+    ic.className = 'ic'; chestIcon(g.ids[0], ic, 20);
+    nm.className = 'cn'; nm.textContent = g.name + (g.kind === 'tile' ? ' (ground)' : '');
+    ct.className = 'meta'; ct.style.gridColumn = 'auto'; ct.textContent = g === sel ? fmt(g.count.n) : '';
+    li.appendChild(ic); li.appendChild(nm); li.appendChild(ct);
+    li.addEventListener('click', function () {
+      state.objSel = state.objSel === key ? null : key;
+      runObjSearch();
+      if (state.objSel && g.count && g.count.best) goTo(g.count.best.x, g.count.best.y, Math.max(state.view.s, 2));
+    });
+    res.appendChild(li);
+  });
+  if (groups.length > 120) { var li = document.createElement('li'); li.className = 'empty'; li.textContent = 'Showing 120 names. Type more to narrow it down.'; res.appendChild(li); }
+}
+$('#objQ').addEventListener('input', function () { clearTimeout(objTimer); state.objSel = null; objTimer = setTimeout(runObjSearch, 250); });
+$('#objClear').addEventListener('click', function () { $('#objQ').value = ''; state.objSel = null; runObjSearch(); });
+document.querySelector('.tab[data-tab="objects"]').addEventListener('click', runObjSearch);
+
 /* ---------- status ---------- */
 var SURFACE_TILES = ['watertile', 'watertile', 'grasstile', 'plainsgrasstile', 'sandtile', 'swampgrasstile', 'snowtile', 'icetile'];
 function tileName(id) { return TILE_NAMES.tiles[id] || TILE_NAMES.objects[id] || itemName(id); }
@@ -5317,6 +5455,7 @@ function setLayer(name, doFit) {
   dirtySeed();
   if (LEVEL_LABEL[name]) state.level = name;
   state.layer = name; state.focus = null; state.found = { color: null, visited: [] };
+  if (state.objFind) { state.objFind.tok = ++objTok; setTimeout(function () { if (!$('#panel [data-pane="objects"]').hidden) runObjSearch(); }, 0); }
   dirtyAll(); refreshAll(); if (doFit) fit();
 }
 var tick = function () { return new Promise(function (r) { setTimeout(r, 0); }); };
