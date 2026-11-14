@@ -6586,7 +6586,6 @@ async function loadSample() {
 }
 var src = null, reloadKeep = false;   // { handles: [...] } or { items: [...] }
 function framed() { try { return window.top !== window; } catch (e) { return true; } }
-function canHandles() { return typeof window.showOpenFilePicker === 'function' && !framed(); }
 function setSource(s) { src = s; $('#reloadBtn').hidden = !s; }
 async function itemsFromHandles(hs) {
   var out = [];
@@ -6602,13 +6601,9 @@ async function openPicked(items, s) {
   setSource(s);
   await loadFiles(items, { keep: keep });
 }
-$('#openFiles').addEventListener('click', async function () {
-  if (!canHandles()) { $('#fileIn').click(); return; }
-  var hs;
-  try { hs = await window.showOpenFilePicker({ multiple: true, types: [{ description: 'Necesse world saves and map files', accept: { 'application/zip': ['.zip', '.mapdata', '.txt'] } }] }); }
-  catch (e) { if (e && e.name !== 'AbortError') $('#fileIn').click(); return; }
-  openPicked(await itemsFromHandles(hs), { handles: hs });
-});
+// The plain file picker: Chrome's newer picker (which could re-read files by itself) refuses the AppData folder
+// where Necesse keeps its saves ("contains system files"), so it is not used for opening.
+$('#openFiles').addEventListener('click', function () { $('#fileIn').click(); });
 // Reload: read the same files again. Handles always give the file as it is now; plain picked files usually
 // cannot be read once the game has rewritten them, so then the picker opens to choose the save again.
 async function reloadSave() {
@@ -6621,7 +6616,7 @@ async function reloadSave() {
     else { items = src.items; await Promise.all(items.map(function (i) { return i.file.slice(0, 1).arrayBuffer(); })); }
     await loadFiles(items, { keep: true });
   } catch (e) {
-    toast('This browser cannot re-read the save once the game has changed it. Choose ' + pickedLabel(src.items || []).short + ' again to reload it.', 6000);
+    toast('The game has saved since this file was opened. Choose ' + pickedLabel(src.items || []).short + ' again to load the new version; the view stays where it is.', 6000);
     reloadKeep = true; $('#fileIn').click();
   } finally { btn.classList.remove('busy'); }
 }
