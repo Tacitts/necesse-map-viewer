@@ -6500,8 +6500,13 @@ $('#cpClose').addEventListener('click', function () { openChest(null); });
 // a chest's name as the game shows it (Storage Box, not storagebox)
 function chestName(p) { return (TILE_NAMES.objects && TILE_NAMES.objects[p.obj]) || itemName(p.obj || 'chest'); }
 // a ladder at the same tile on the next layer: down from the surface to the cave (and on to the deep cave), up the other way
-var LADDER_TO = { ladderdown: ['surface', 'cave'], deepladderdown: ['cave', 'deepcave'], ladderup: ['cave', 'surface'], deepladderup: ['deepcave', 'cave'] };
-var LADDER_PAIR = { ladderdown: 'ladderup', ladderup: 'ladderdown', deepladderdown: 'deepladderup', deepladderup: 'deepladderdown' };
+// every way up leads to the surface (the deep cave's ladder up included); down goes one layer deeper, and a deep ladder down to the deep cave
+var LADDER_TO = { ladderdown: 1, deepladderdown: 1, ladderup: 1, deepladderup: 1 };
+function ladderTarget(ld) {
+  if (/up$/.test(ld.type)) return 'surface';
+  if (ld.type === 'deepladderdown' || state.level === 'cave') return 'deepcave';
+  return 'cave';
+}
 function ladderAt(px, py) {
   var list = state.ladders[state.level] || [], s = state.view.s;
   if (!list.length || s < 1 / 16) return null;
@@ -6513,9 +6518,9 @@ function ladderAt(px, py) {
   return best;
 }
 function followLadder(ld) {
-  var to = LADDER_TO[ld.type][1], x = ld.x, y = ld.y;
+  var to = ladderTarget(ld), x = ld.x, y = ld.y;
   // the other end is normally on the very same tile; take it if it is a step or two away
-  var other = (state.ladders[to] || []).filter(function (q) { return q.type === LADDER_PAIR[ld.type] && Math.abs(q.x - x) <= 3 && Math.abs(q.y - y) <= 3; })[0];
+  var other = (state.ladders[to] || []).filter(function (q) { return Math.abs(q.x - x) <= 3 && Math.abs(q.y - y) <= 3; })[0];
   if (other) { x = other.x; y = other.y; }
   $('#layerSel').value = to; setLayer(to, false);
   state.view.cx = x + .5; state.view.cy = y + .5; updateZoom();
@@ -6557,7 +6562,7 @@ cv.addEventListener('pointermove', function (e) {
   if (ld) {
     showTipAt(p.x, p.y, 'l' + ld.x + ',' + ld.y + ':' + state.level, function (tip) {
       var b = document.createElement('b'); b.textContent = LADDER_NAME[ld.type]; tip.appendChild(b);
-      var h2 = document.createElement('div'); h2.className = 'hint2'; h2.textContent = 'Click to go ' + (/down/.test(ld.type) ? 'down' : 'up') + ' to the ' + LEVEL_LABEL[LADDER_TO[ld.type][1]]; tip.appendChild(h2);
+      var h2 = document.createElement('div'); h2.className = 'hint2'; h2.textContent = 'Click to go ' + (/down/.test(ld.type) ? 'down' : 'up') + ' to the ' + LEVEL_LABEL[ladderTarget(ld)]; tip.appendChild(h2);
     });
     return;
   }
