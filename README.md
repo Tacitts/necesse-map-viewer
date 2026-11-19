@@ -24,5 +24,23 @@ Your save is read inside your own browser. It is never uploaded anywhere.
 
 ## Notes
 - Made for Necesse 1.3.3. Other versions may generate slightly differently.
-- The whole viewer is the single file `index.html`; you can also download it and open it offline.
+- To use it offline, download `necesse-map-viewer.html` from the [latest release](https://github.com/Tacitts/necesse-map-viewer/releases/latest). It is the whole viewer in one file and opens straight from your computer.
+
+## How the code is laid out
+| Path | What it is |
+|---|---|
+| `index.html` | The page itself: the toolbar, panels and map area. |
+| `css/viewer.css` | Styles. |
+| `js/viewer.js` | The viewer: reads the world save, draws the map, lists, search and hover cards, and runs the generator in background workers. |
+| `js/generator/necesse-gen.js` | The world generator: biomes, oceans, rivers, beaches and caves. |
+| `js/generator/cave-presets.js` | Where structures are placed on each layer. |
+| `js/generator/cave-chests.js` | Loot tables and the chests in generated structures. |
+| `js/generator/village-gen.js` | Villages, and the preset engine the other structures use. |
+| `js/generator/structures.js` | Every other structure, tile by tile. |
+| `js/generator/biome-deco.js` | Trees, grass, flowers, rocks, ores and cave plants. |
+| `js/generator/jhashmap.js` | Java HashMap iteration order, which the game's generation depends on. |
+| `data/` | Game data the generator and viewer use: presets, loot tables, names, map colours, biome rules. |
+| `images/` | Item icons and the site icons. |
+
+The site needs to be served over the web (as GitHub Pages does), because the background workers load the generator files; opening `index.html` from a downloaded copy of the repository will not work. Use the release file for that.
  
